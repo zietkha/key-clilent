@@ -1,0 +1,9 @@
+Package: com.tqtdev.keysystem
+Name: KeySystem
+Depends: 
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Standalone Key System & Metal ImGui Overlay for iOS Sideloading
+Maintainer: TQTDev
+Author: TQTDev
+Section: Tweaks

@@ -1,0 +1,44 @@
+name: Build iOS Dylib
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build KeySystem.dylib for iOS
+    runs-on: macos-14
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Theos
+        run: |
+          echo "=== Installing Theos ==="
+          export THEOS=~/theos
+          git clone --recursive https://github.com/theos/theos.git $THEOS
+          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+
+      - name: Download iPhoneOS SDK
+        run: |
+          echo "=== Downloading iPhoneOS 16.5 SDK ==="
+          curl -fsSL https://github.com/xybp888/iOS-SDKs/releases/download/iOS-16.5/iPhoneOS16.5.sdk.tar.xz -o iPhoneOS.sdk.tar.xz
+          tar -xf iPhoneOS.sdk.tar.xz -C ~/theos/sdks/
+          rm -f iPhoneOS.sdk.tar.xz
+
+      - name: Build Dylib with Theos
+        run: |
+          export THEOS=~/theos
+          make clean
+          make FINALPACKAGE=1
+
+      - name: Sign Dylib with ldid
+        run: |
+          ~/theos/bin/ldid -S .theos/obj/KeySystem.dylib || true
+
+      - name: Upload KeySystem.dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: KeySystem-Dylib
+          path: .theos/obj/KeySystem.dylib
