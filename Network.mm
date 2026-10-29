@@ -128,18 +128,19 @@ std::string HttpGetRequest(const std::string& urlString) {
 
     // Kiểm tra trạng thái thành công hỗ trợ cả bool (true/false) lẫn string ("success"/"true"/"1")
     BOOL isSuccess = NO;
-    id statusVal = dict[@"status"];
-    id successVal = dict[@"success"];
-    id validVal = dict[@"valid"];
-
-    if ([statusVal isKindOfClass:[NSNumber class]] && [statusVal boolValue]) isSuccess = YES;
-    else if ([statusVal isKindOfClass:[NSString class]] && ([statusVal.lowercaseString isEqualToString:@"success"] || [statusVal isEqualToString:@"true"] || [statusVal isEqualToString:@"1"])) isSuccess = YES;
-
-    if ([successVal isKindOfClass:[NSNumber class]] && [successVal boolValue]) isSuccess = YES;
-    else if ([successVal isKindOfClass:[NSString class]] && ([successVal.lowercaseString isEqualToString:@"success"] || [successVal isEqualToString:@"true"] || [successVal isEqualToString:@"1"])) isSuccess = YES;
-
-    if ([validVal isKindOfClass:[NSNumber class]] && [validVal boolValue]) isSuccess = YES;
-    else if ([validVal isKindOfClass:[NSString class]] && ([validVal.lowercaseString isEqualToString:@"success"] || [validVal isEqualToString:@"true"] || [validVal isEqualToString:@"1"])) isSuccess = YES;
+    for (NSString *keyName in @[@"status", @"success", @"valid"]) {
+        id val = dict[keyName];
+        if ([val isKindOfClass:[NSNumber class]] && [(NSNumber *)val boolValue]) {
+            isSuccess = YES;
+            break;
+        } else if ([val isKindOfClass:[NSString class]]) {
+            NSString *s = (NSString *)val;
+            if ([s.lowercaseString isEqualToString:@"success"] || [s isEqualToString:@"true"] || [s isEqualToString:@"1"]) {
+                isSuccess = YES;
+                break;
+            }
+        }
+    }
 
     // Lấy thông điệp thông báo từ server
     NSString *serverMsg = @"";
@@ -183,7 +184,7 @@ std::string HttpGetRequest(const std::string& urlString) {
     NSNumber *timestamp = dict[@"timestamp"] ?: @0;
     if (signature.length > 0) {
         NSString *canonical = [NSString stringWithFormat:@"%@:%@:%@:%lld",
-                               statusVal ?: @"", expire, serverHwid, [timestamp longLongValue]];
+                               dict[@"status"] ?: @"", expire, serverHwid, [timestamp longLongValue]];
         NSString *expectedSign = [self computeHMACSHA256:canonical key:HMAC_SECRET_KEY];
         if (![signature.lowercaseString isEqualToString:expectedSign.lowercaseString]) {
             res.success = false;
