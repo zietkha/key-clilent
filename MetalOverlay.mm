@@ -110,8 +110,19 @@ static bool IsTouchInsideAnyImGuiWindow(CGPoint pt) {
 @end
 
 // =========================================================================
-// METAL VIEW RENDER IMGUI
+// METAL VIEW RENDER IMGUI & HỖ TRỢ BÀN PHÍM ẢO IOS (UIKeyInput)
 // =========================================================================
+static MetalOverlayView *g_ActiveMetalView = nil;
+
+void RequestKeyboard(bool show) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (g_ActiveMetalView) {
+            if (show) [g_ActiveMetalView becomeFirstResponder];
+            else [g_ActiveMetalView resignFirstResponder];
+        }
+    });
+}
+
 @interface MetalOverlayView () <MTKViewDelegate>
 @end
 
@@ -129,9 +140,58 @@ static bool IsTouchInsideAnyImGuiWindow(CGPoint pt) {
         self.contentScaleFactor = [UIScreen mainScreen].scale;
         self.multipleTouchEnabled = NO;
         self.userInteractionEnabled = YES;
+        g_ActiveMetalView = self;
     }
     return self;
 }
+
+#pragma mark - UIKeyInput Protocol (Bàn phím ảo iOS)
+
+- (BOOL)canBecomeFirstResponder {
+    return YES;
+}
+
+- (BOOL)hasText {
+    return YES;
+}
+
+- (void)insertText:(NSString *)text {
+    ImGuiIO& io = ImGui::GetIO();
+    if ([text isEqualToString:@"\n"]) {
+        io.AddKeyEvent(ImGuiKey_Enter, true);
+        io.AddKeyEvent(ImGuiKey_Enter, false);
+        [self resignFirstResponder];
+        return;
+    }
+    const char *utf8 = [text UTF8String];
+    if (utf8) {
+        io.AddInputCharactersUTF8(utf8);
+    }
+}
+
+- (void)deleteBackward {
+    ImGuiIO& io = ImGui::GetIO();
+    io.AddKeyEvent(ImGuiKey_Backspace, true);
+    io.AddKeyEvent(ImGuiKey_Backspace, false);
+}
+
+- (UITextAutocorrectionType)autocorrectionType {
+    return UITextAutocorrectionTypeNo;
+}
+
+- (UITextAutocapitalizationType)autocapitalizationType {
+    return UITextAutocapitalizationTypeNone;
+}
+
+- (UIKeyboardType)keyboardType {
+    return UIKeyboardTypeASCIICapable;
+}
+
+- (UIReturnKeyType)returnKeyType {
+    return UIReturnKeyDone;
+}
+
+#pragma mark - Touch Handling
 
 - (void)handleTouch:(UITouch *)touch phase:(UITouchPhase)phase {
     CGPoint loc = [touch locationInView:self];
@@ -172,6 +232,23 @@ static bool IsTouchInsideAnyImGuiWindow(CGPoint pt) {
         CGFloat scale = [UIScreen mainScreen].scale;
         io.DisplaySize = ImVec2(view.bounds.size.width, view.bounds.size.height);
         io.DisplayFramebufferScale = ImVec2(scale, scale);
+
+        // Tự động bật/tắt bàn phím ảo iOS theo trạng thái WantTextInput của ImGui
+        static bool lastWantTextInput = false;
+        if (io.WantTextInput != lastWantTextInput) {
+            lastWantTextInput = io.WantTextInput;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (io.WantTextInput) {
+                    if (![view isFirstResponder]) {
+                        [view becomeFirstResponder];
+                    }
+                } else {
+                    if ([view isFirstResponder]) {
+                        [view resignFirstResponder];
+                    }
+                }
+            });
+        }
 
         // Tính toán DeltaTime
         static CFTimeInterval lastTime = 0.0;
@@ -295,7 +372,7 @@ static void InitializeOverlay() {
             g_OverlayWindow = [[PassthroughWindow alloc] initWithFrame:screenBounds];
         }
 
-        g_OverlayWindow.windowLevel = UIWindowLevelAlert + 100.0;
+        g_OverlayWindow.windowLevel = UIWindowLevelStatusBar - 1.0;
         g_OverlayWindow.backgroundColor = [UIColor clearColor];
         g_OverlayWindow.hidden = NO;
 

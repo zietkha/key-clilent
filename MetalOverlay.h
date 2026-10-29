@@ -8,5 +8,8 @@
 @interface MetalOverlayViewController : UIViewController
 @end
 
-@interface MetalOverlayView : MTKView
+@interface MetalOverlayView : MTKView <UIKeyInput>
 @end
+
+// Hàm điều khiển hiển thị/ẩn bàn phím ảo iOS
+void RequestKeyboard(bool show);

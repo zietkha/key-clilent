@@ -5,6 +5,7 @@
 #include "Config.h"
 #include "KeychainHelper.h"
 #include "Network.h"
+#include "MetalOverlay.h"
 #include "imgui.h"
 
 #include <iostream>
@@ -253,7 +254,12 @@ void DrawKeySystemMenu() {
 
     // 4. Vẽ cửa sổ ImGui Nhập Key
     ImVec2 center = ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
-    ImGui::SetNextWindowPos(center, ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+    // Khi đang mở bàn phím, nâng cửa sổ lên cao để bàn phím không che ô nhập key
+    if (ImGui::GetIO().WantTextInput) {
+        ImGui::SetNextWindowPos(ImVec2(center.x, 25), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+    } else {
+        ImGui::SetNextWindowPos(center, ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+    }
     ImGui::SetNextWindowSize(ImVec2(340, 310), ImGuiCond_FirstUseEver);
     ImGui::Begin("XAC THUC BAN QUYEN", nullptr,
                  ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
@@ -274,17 +280,35 @@ void DrawKeySystemMenu() {
 
     ImGui::Spacing();
     ImGui::Text("Nhap Ma Key:");
-    ImGui::InputText("##key", keyBuffer, IM_ARRAYSIZE(keyBuffer));
+    if (ImGui::InputText("##key", keyBuffer, IM_ARRAYSIZE(keyBuffer))) {
+        // Text updated
+    }
+    if (ImGui::IsItemClicked()) {
+        RequestKeyboard(true);
+    }
 
     ImGui::Spacing();
 
-    // Nút dán key từ Clipboard
-    ImGui::SameLine();
-    if (ImGui::Button("Dan Key", ImVec2(80, 26))) {
+    // Nút Dán Key từ Clipboard
+    if (ImGui::Button("Dan Key", ImVec2(75, 28))) {
         NSString *clip = [UIPasteboard generalPasteboard].string;
         if (clip && clip.length > 0) {
             strncpy(keyBuffer, [clip UTF8String], sizeof(keyBuffer) - 1);
             keyBuffer[sizeof(keyBuffer) - 1] = '\0';
+        }
+    }
+
+    // Nút mở Bàn Phím iOS
+    ImGui::SameLine();
+    if (ImGui::Button("Ban Phim", ImVec2(80, 28))) {
+        RequestKeyboard(true);
+    }
+
+    // Nút đóng bàn phím nếu đang mở
+    if (ImGui::GetIO().WantTextInput) {
+        ImGui::SameLine();
+        if (ImGui::Button("Dong [X]", ImVec2(70, 28))) {
+            RequestKeyboard(false);
         }
     }
 
