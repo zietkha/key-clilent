@@ -49,20 +49,53 @@ static bool IsTouchInsideAnyImGuiWindow(CGPoint pt) {
 @end
 
 // =========================================================================
-// CONTROLLER: HỖ TRỢ XOAY MÀN HÌNH & SAFE AREA
+// CONTROLLER: ĐỒNG BỘ HOÀN TOÀN HƯỚNG HIỂN THỊ VỚI GAME GỐC
 // =========================================================================
 @implementation MetalOverlayViewController
 
+- (UIViewController *)hostAppRootViewController {
+    if (@available(iOS 13.0, *)) {
+        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if ([scene isKindOfClass:[UIWindowScene class]]) {
+                UIWindowScene *ws = (UIWindowScene *)scene;
+                for (UIWindow *w in ws.windows) {
+                    if (w != self.view.window && w.rootViewController && !w.hidden) {
+                        return w.rootViewController;
+                    }
+                }
+            }
+        }
+    }
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        if (w != self.view.window && w.rootViewController && !w.hidden) {
+            return w.rootViewController;
+        }
+    }
+    return nil;
+}
+
 - (BOOL)shouldAutorotate {
+    UIViewController *host = [self hostAppRootViewController];
+    if (host) return [host shouldAutorotate];
     return YES;
 }
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+    UIViewController *host = [self hostAppRootViewController];
+    if (host) return [host supportedInterfaceOrientations];
     return UIInterfaceOrientationMaskAll;
 }
 
+- (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation {
+    UIViewController *host = [self hostAppRootViewController];
+    if (host) return [host preferredInterfaceOrientationForPresentation];
+    return UIInterfaceOrientationUnknown;
+}
+
 - (BOOL)prefersStatusBarHidden {
-    return NO;
+    UIViewController *host = [self hostAppRootViewController];
+    if (host) return [host prefersStatusBarHidden];
+    return YES;
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
@@ -74,7 +107,6 @@ static bool IsTouchInsideAnyImGuiWindow(CGPoint pt) {
         io.DisplayFramebufferScale = ImVec2(scale, scale);
     }];
 }
-
 @end
 
 // =========================================================================
@@ -274,7 +306,8 @@ static void InitializeOverlay() {
         metalView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         vc.view = metalView;
 
-        [g_OverlayWindow makeKeyAndVisible];
+        // Chỉ hiển thị overlay mà KHÔNG cướp KeyWindow của game gốc (tránh làm lệch hướng màn hình)
+        [g_OverlayWindow setHidden:NO];
         NSLog(@"[KeySystem] Metal Overlay da khoi tao thanh cong tren UIWindow!");
     });
 }

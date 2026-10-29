@@ -114,6 +114,8 @@ void InitKeySystem() {
 void DrawMainModMenu() {
     if (!g_MenuVisible) return;
 
+    ImVec2 center = ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
+    ImGui::SetNextWindowPos(center, ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(380, 420), ImGuiCond_FirstUseEver);
     ImGui::Begin("MENU DIEU KHIEN CHINH", &g_MenuVisible, ImGuiWindowFlags_NoCollapse);
 
@@ -250,6 +252,8 @@ void DrawKeySystemMenu() {
     }
 
     // 4. Vẽ cửa sổ ImGui Nhập Key
+    ImVec2 center = ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
+    ImGui::SetNextWindowPos(center, ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(340, 310), ImGuiCond_FirstUseEver);
     ImGui::Begin("XAC THUC BAN QUYEN", nullptr,
                  ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
