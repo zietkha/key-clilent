@@ -104,8 +104,9 @@ std::string HttpGetRequest(const std::string& urlString) {
     std::string rawJson = "";
     
     for (NSString *ep in endpoints) {
-        NSString *fullUrl = [NSString stringWithFormat:@"%@%@?key=%@&hwid=%@",
-                             SERVER_BASE_URL, ep, encodedKey, encodedHwid];
+        // Gửi đầy đủ các biến thiết bị (device_id, hwid, udid, device) để web tqtdev.2bd.net ghi nhận "Đã dùng" và khóa thiết bị
+        NSString *fullUrl = [NSString stringWithFormat:@"%@%@?key=%@&device_id=%@&hwid=%@&udid=%@&device=%@",
+                             SERVER_BASE_URL, ep, encodedKey, encodedHwid, encodedHwid, encodedHwid, encodedHwid];
         rawJson = HttpGetRequest([fullUrl UTF8String]);
         if (!rawJson.empty()) break;
     }
@@ -153,19 +154,30 @@ std::string HttpGetRequest(const std::string& urlString) {
         return res;
     }
 
-    // 1. Kiểm tra HWID (nếu server có trả về trường hwid)
-    NSString *serverHwid = dict[@"hwid"] ? [NSString stringWithFormat:@"%@", dict[@"hwid"]] : @"";
-    if (serverHwid.length > 0 && ![serverHwid isEqualToString:hwid]) {
+    // 1. Kiểm tra HWID / device_id (nếu server có trả về trường hwid hoặc device_id hợp lệ, bỏ qua NSNull)
+    NSString *serverHwid = @"";
+    id rawHwid = dict[@"hwid"] ?: dict[@"device_id"];
+    if (rawHwid && ![rawHwid isKindOfClass:[NSNull class]]) {
+        serverHwid = [NSString stringWithFormat:@"%@", rawHwid];
+        if ([serverHwid isEqualToString:@"<null>"] || [serverHwid isEqualToString:@"null"]) {
+            serverHwid = @"";
+        }
+    }
+    if (serverHwid.length > 0 && [serverHwid caseInsensitiveCompare:hwid] != NSOrderedSame) {
         res.success = false;
         res.message = "Key da bi khoa cho thiet bi khac!";
         return res;
     }
 
-    // 2. Kiểm tra hạn dùng (nếu có trả về)
+    // 2. Kiểm tra hạn dùng (nếu có trả về, bỏ qua NSNull)
     NSString *expire = @"";
-    if (dict[@"expire"]) expire = [NSString stringWithFormat:@"%@", dict[@"expire"]];
-    else if (dict[@"expires_at"]) expire = [NSString stringWithFormat:@"%@", dict[@"expires_at"]];
-    else if (dict[@"expiration"]) expire = [NSString stringWithFormat:@"%@", dict[@"expiration"]];
+    id rawExpire = dict[@"expire"] ?: (dict[@"expires_at"] ?: dict[@"expiration"]);
+    if (rawExpire && ![rawExpire isKindOfClass:[NSNull class]]) {
+        expire = [NSString stringWithFormat:@"%@", rawExpire];
+        if ([expire isEqualToString:@"<null>"] || [expire isEqualToString:@"null"]) {
+            expire = @"";
+        }
+    }
 
     if (expire.length > 0) {
         NSDateFormatter *df = [[NSDateFormatter alloc] init];
@@ -179,8 +191,15 @@ std::string HttpGetRequest(const std::string& urlString) {
         }
     }
 
-    // 3. Kiểm tra chữ ký HMAC nếu có
-    NSString *signature = dict[@"signature"] ? [NSString stringWithFormat:@"%@", dict[@"signature"]] : @"";
+    // 3. Kiểm tra chữ ký HMAC nếu có (bỏ qua NSNull)
+    NSString *signature = @"";
+    id rawSig = dict[@"signature"];
+    if (rawSig && ![rawSig isKindOfClass:[NSNull class]]) {
+        signature = [NSString stringWithFormat:@"%@", rawSig];
+        if ([signature isEqualToString:@"<null>"] || [signature isEqualToString:@"null"]) {
+            signature = @"";
+        }
+    }
     NSNumber *timestamp = dict[@"timestamp"] ?: @0;
     if (signature.length > 0) {
         NSString *canonical = [NSString stringWithFormat:@"%@:%@:%@:%lld",

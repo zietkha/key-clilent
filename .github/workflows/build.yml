@@ -23,6 +23,8 @@ jobs:
             -arch arm64 \
             -miphoneos-version-min=14.0 \
             -fobjc-arc \
+            -fvisibility=hidden \
+            -fvisibility-inlines-hidden \
             -std=c++17 \
             -Iimgui -I. \
             -framework UIKit \

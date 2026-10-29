@@ -27,9 +27,6 @@ static bool isChecking = false;
 static std::string statusMessage = "";
 static std::string cachedExpireDate = "";
 static std::future<KeyValidationResult> httpFuture;
-static ServerConfig g_ServerConfig;
-static bool isConfigLoading = false;
-static std::future<ServerConfig> configFuture;
 
 // Thời gian đếm ngược
 static auto g_StartTime = std::chrono::steady_clock::now();
@@ -71,12 +68,15 @@ static void StartPeriodicRecheckWorker() {
                 KeyValidationResult res = [NetworkService validateKey:nsKey];
                 
                 if (!res.success) {
-                    NSLog(@"[KeySystem] Re-check that bai: %s. Khoa menu!", res.message.c_str());
+                    NSLog(@"[KeySystem] Re-check that bai: %s. Khoa game va yeu cau nhap lai key!", res.message.c_str());
                     isKeyValid = false;
+                    g_MenuVisible = true;
                     [KeychainHelper deleteKey];
-                    statusMessage = "Key da het han hoac bi thu hoi!";
+                    memset(keyBuffer, 0, sizeof(keyBuffer));
+                    statusMessage = "Key da het han hoac bi thu hoi! Vui long nhap lai.";
                     // Reset thời gian đếm ngược
                     g_StartTime = std::chrono::steady_clock::now();
+                    SetKeyOverlayActive(true);
                 } else {
                     cachedExpireDate = res.expireDate;
                     NSLog(@"[KeySystem] Re-check thanh cong. Han dung: %s", res.expireDate.c_str());
@@ -110,112 +110,11 @@ void InitKeySystem() {
 }
 
 // =========================================================================
-// MENU CHÍNH CỦA BẠN (ĐƯỢC GỌI KHI KEY HỢP LỆ)
-// =========================================================================
-void DrawMainModMenu() {
-    if (!g_MenuVisible) return;
-
-    ImVec2 center = ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
-    ImGui::SetNextWindowPos(center, ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(380, 420), ImGuiCond_FirstUseEver);
-    ImGui::Begin("MENU DIEU KHIEN CHINH", &g_MenuVisible, ImGuiWindowFlags_NoCollapse);
-
-    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "TRANG THAI: BAN QUYEN HOP LE");
-    ImGui::Separator();
-
-    if (!cachedExpireDate.empty()) {
-        ImGui::Text("Han su dung: %s", cachedExpireDate.c_str());
-    }
-
-    // Hiển thị thông báo từ server
-    if (g_ServerConfig.loaded) {
-        ImGui::Text("Phien ban Mod: %s", g_ServerConfig.version.c_str());
-        if (!g_ServerConfig.announcement.empty()) {
-            ImGui::Spacing();
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Thong bao: %s", g_ServerConfig.announcement.c_str());
-        }
-    } else if (isConfigLoading) {
-        ImGui::TextDisabled("Dang tai cau hinh tu server...");
-    }
-
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Text("--- DANH SACH TINH NANG (SERVER DIEU KHIEN) ---");
-
-    // Hiển thị các tính năng từ server config
-    if (g_ServerConfig.loaded && !g_ServerConfig.featureToggles.empty()) {
-        for (auto& item : g_ServerConfig.featureToggles) {
-            bool state = item.second;
-            if (ImGui::Checkbox(item.first.c_str(), &state)) {
-                item.second = state;
-                // TODO: Gọi hàm bật/tắt tính năng trong game của bạn tại đây
-            }
-        }
-    } else {
-        // Dự phòng các tính năng mẫu nếu chưa load config
-        static bool sampleFeature1 = false;
-        static bool sampleFeature2 = false;
-        ImGui::Checkbox("Wallhack / ESP (Mau)", &sampleFeature1);
-        ImGui::Checkbox("Aimbot Silent (Mau)", &sampleFeature2);
-    }
-
-    ImGui::Spacing();
-    ImGui::Separator();
-
-    if (ImGui::Button("An Menu", ImVec2(-1, 35))) {
-        g_MenuVisible = false;
-    }
-
-    ImGui::Spacing();
-    if (ImGui::Button("Dang xuat Key (Xoa Keychain)", ImVec2(-1, 35))) {
-        [KeychainHelper deleteKey];
-        isKeyValid = false;
-        memset(keyBuffer, 0, sizeof(keyBuffer));
-        statusMessage = "Da dang xuat key. Vui long nhap lai!";
-        g_StartTime = std::chrono::steady_clock::now();
-    }
-
-    ImGui::End();
-}
-
-// =========================================================================
-// GIAO DIỆN NHẬP KEY & QUẢN LÝ
+// GIAO DIỆN NHẬP KEY (TỰ ĐỘNG TẮT POP-UP KHI KEY ĐÚNG ĐỂ VÀO THẲNG GAME)
 // =========================================================================
 void DrawKeySystemMenu() {
-    // 1. Nếu key đã hợp lệ -> Vẽ Menu chính và nút ẩn/hiện
+    // 1. Nếu key đã hợp lệ -> Tắt hẳn pop-up, không vẽ bất kỳ menu hay nút nổi nào
     if (isKeyValid) {
-        // Nút nổi (Floating Toggle Button) khi menu bị ẩn
-        if (!g_MenuVisible) {
-            ImGui::SetNextWindowPos(ImVec2(20, 60), ImGuiCond_FirstUseEver);
-            ImGui::Begin("##FloatingToggle", nullptr,
-                         ImGuiWindowFlags_NoTitleBar |
-                         ImGuiWindowFlags_AlwaysAutoResize |
-                         ImGuiWindowFlags_NoMove |
-                         ImGuiWindowFlags_NoSavedSettings);
-            if (ImGui::Button("KEY MENU [MO]", ImVec2(120, 40))) {
-                g_MenuVisible = true;
-            }
-            ImGui::End();
-            return;
-        }
-
-        // Tải config từ server nếu chưa tải xong
-        if (!g_ServerConfig.loaded && !isConfigLoading) {
-            isConfigLoading = true;
-            std::string currentKey = keyBuffer;
-            configFuture = std::async(std::launch::async, [currentKey]() {
-                NSString *nsKey = [NSString stringWithUTF8String:currentKey.c_str()];
-                return [NetworkService fetchServerConfig:nsKey];
-            });
-        }
-
-        if (isConfigLoading && configFuture.valid() &&
-            configFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-            g_ServerConfig = configFuture.get();
-            isConfigLoading = false;
-        }
-
-        DrawMainModMenu();
         return;
     }
 
@@ -238,19 +137,34 @@ void DrawKeySystemMenu() {
 
         if (res.success) {
             isKeyValid = true;
+            g_MenuVisible = false;
             statusMessage = res.message;
             cachedExpireDate = res.expireDate;
+            RequestKeyboard(false);
             
             // Lưu key hợp lệ vào Keychain cho lần khởi động sau
             NSString *nsKey = [NSString stringWithUTF8String:keyBuffer];
             [KeychainHelper saveKey:nsKey];
-            NSLog(@"[KeySystem] Xac thuc thanh cong! Da luu vao Keychain.");
+            SetKeyOverlayActive(false);
+            NSLog(@"[KeySystem] Xac thuc thanh cong! Da luu vao Keychain, dong pop-up va mo Menu Hack.");
+            return;
         } else {
-            statusMessage = res.message;
+            isKeyValid = false;
+            g_MenuVisible = true;
+            statusMessage = res.message.empty() ? "Key sai hoac khong hop le! Vui long nhap lai." : res.message;
             [KeychainHelper deleteKey];
-            NSLog(@"[KeySystem] Xac thuc that bai: %s", res.message.c_str());
+            memset(keyBuffer, 0, sizeof(keyBuffer));
+            NSLog(@"[KeySystem] Xac thuc that bai: %s", statusMessage.c_str());
         }
     }
+
+    // Vẽ lớp nền mờ che toàn màn hình khi chưa nhập đúng key
+    ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+    ImGui::GetBackgroundDrawList()->AddRectFilled(
+        ImVec2(0.0f, 0.0f),
+        displaySize,
+        IM_COL32(0, 0, 0, 150)
+    );
 
     // 4. Vẽ cửa sổ ImGui Nhập Key
     ImVec2 center = ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);

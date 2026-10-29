@@ -37,6 +37,9 @@
 #include "imgui_impl_metal.h"
 #import <time.h>
 #import <Metal/Metal.h>
+#define MetalBuffer TQTKeyMetalBuffer
+#define FramebufferDescriptor TQTKeyFramebufferDescriptor
+#define MetalContext TQTKeyMetalContext
 
 #pragma mark - Support classes
 
