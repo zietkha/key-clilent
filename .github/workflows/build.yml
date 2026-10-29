@@ -20,13 +20,13 @@ jobs:
           git clone --recursive https://github.com/theos/theos.git $THEOS
           echo "THEOS=$HOME/theos" >> $GITHUB_ENV
 
-      - name: Download iPhoneOS SDK
+      - name: Setup iPhoneOS SDK
         run: |
-          echo "=== Downloading iPhoneOS 16.5 SDK ==="
+          echo "=== Linking Xcode iPhoneOS SDK to Theos ==="
           mkdir -p ~/theos/sdks
-          curl -fsSL https://github.com/xybp888/iOS-SDKs/releases/download/iOS-16.5/iPhoneOS16.5.sdk.tar.xz -o iPhoneOS.sdk.tar.xz
-          tar -xf iPhoneOS.sdk.tar.xz -C ~/theos/sdks/
-          rm -f iPhoneOS.sdk.tar.xz
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "Xcode SDK Path: $SDK_PATH"
+          ln -s "$SDK_PATH" ~/theos/sdks/iPhoneOS.sdk
 
       - name: Build Dylib with Theos
         run: |
