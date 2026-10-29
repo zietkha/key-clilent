@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build KeySystem.dylib for iOS
@@ -46,8 +49,17 @@ jobs:
           brew install ldid || true
           ldid -S KeySystem.dylib || true
 
-      - name: Upload KeySystem.dylib
+      - name: Upload KeySystem.dylib Artifact
         uses: actions/upload-artifact@v4
         with:
           name: KeySystem-Dylib
           path: KeySystem.dylib
+
+      - name: Publish Direct Download Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "KeySystem.dylib iOS (Direct Download)"
+          files: KeySystem.dylib
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
