@@ -6,7 +6,7 @@
 // =========================================================================
 // Thay đổi domain và endpoint của server tại đây
 #define SERVER_BASE_URL         @"https://tqtdev.2bd.net"
-#define ENDPOINT_CHECK_KEY      @"/get_key.php"
+#define ENDPOINT_CHECK_KEY      @"/api_check.php"
 #define ENDPOINT_GET_CONFIG     @"/get_config.php"
 
 // Secret Key cho HMAC-SHA256 chống giả mạo response (khớp với server PHP)

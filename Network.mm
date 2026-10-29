@@ -99,10 +99,17 @@ std::string HttpGetRequest(const std::string& urlString) {
     NSString *encodedKey = [self urlEncode:key];
     NSString *encodedHwid = [self urlEncode:hwid];
 
-    NSString *fullUrl = [NSString stringWithFormat:@"%@%@?key=%@&hwid=%@",
-                         SERVER_BASE_URL, ENDPOINT_CHECK_KEY, encodedKey, encodedHwid];
+    // Thử endpoint api_check.php trước, nếu lỗi thì thử get_key.php
+    NSArray *endpoints = @[ENDPOINT_CHECK_KEY, @"/get_key.php"];
+    std::string rawJson = "";
+    
+    for (NSString *ep in endpoints) {
+        NSString *fullUrl = [NSString stringWithFormat:@"%@%@?key=%@&hwid=%@",
+                             SERVER_BASE_URL, ep, encodedKey, encodedHwid];
+        rawJson = HttpGetRequest([fullUrl UTF8String]);
+        if (!rawJson.empty()) break;
+    }
 
-    std::string rawJson = HttpGetRequest([fullUrl UTF8String]);
     if (rawJson.empty()) {
         res.success = false;
         res.message = "Loi ket noi server hoac timeout!";
@@ -119,31 +126,50 @@ std::string HttpGetRequest(const std::string& urlString) {
         return res;
     }
 
-    NSString *status = dict[@"status"];
-    NSString *serverMsg = dict[@"message"] ?: @"";
-    NSString *expire = dict[@"expire"] ?: @"";
-    NSString *serverHwid = dict[@"hwid"] ?: @"";
-    NSNumber *timestamp = dict[@"timestamp"] ?: @0;
-    NSString *signature = dict[@"signature"] ?: @"";
+    // Kiểm tra trạng thái thành công hỗ trợ cả bool (true/false) lẫn string ("success"/"true"/"1")
+    BOOL isSuccess = NO;
+    id statusVal = dict[@"status"];
+    id successVal = dict[@"success"];
+    id validVal = dict[@"valid"];
 
-    if (![status isEqualToString:@"success"]) {
+    if ([statusVal isKindOfClass:[NSNumber class]] && [statusVal boolValue]) isSuccess = YES;
+    else if ([statusVal isKindOfClass:[NSString class]] && ([statusVal.lowercaseString isEqualToString:@"success"] || [statusVal isEqualToString:@"true"] || [statusVal isEqualToString:@"1"])) isSuccess = YES;
+
+    if ([successVal isKindOfClass:[NSNumber class]] && [successVal boolValue]) isSuccess = YES;
+    else if ([successVal isKindOfClass:[NSString class]] && ([successVal.lowercaseString isEqualToString:@"success"] || [successVal isEqualToString:@"true"] || [successVal isEqualToString:@"1"])) isSuccess = YES;
+
+    if ([validVal isKindOfClass:[NSNumber class]] && [validVal boolValue]) isSuccess = YES;
+    else if ([validVal isKindOfClass:[NSString class]] && ([validVal.lowercaseString isEqualToString:@"success"] || [validVal isEqualToString:@"true"] || [validVal isEqualToString:@"1"])) isSuccess = YES;
+
+    // Lấy thông điệp thông báo từ server
+    NSString *serverMsg = @"";
+    if (dict[@"message"] && [dict[@"message"] isKindOfClass:[NSString class]]) serverMsg = dict[@"message"];
+    else if (dict[@"msg"] && [dict[@"msg"] isKindOfClass:[NSString class]]) serverMsg = dict[@"msg"];
+
+    if (!isSuccess) {
         res.success = false;
         res.message = serverMsg.length > 0 ? [serverMsg UTF8String] : "Key khong hop le hoac bi khoa!";
         return res;
     }
 
-    // 1. Kiểm tra HWID (nếu server trả về hwid)
+    // 1. Kiểm tra HWID (nếu server có trả về trường hwid)
+    NSString *serverHwid = dict[@"hwid"] ? [NSString stringWithFormat:@"%@", dict[@"hwid"]] : @"";
     if (serverHwid.length > 0 && ![serverHwid isEqualToString:hwid]) {
         res.success = false;
         res.message = "Key da bi khoa cho thiet bi khac!";
         return res;
     }
 
-    // 2. Kiểm tra hạn dùng
+    // 2. Kiểm tra hạn dùng (nếu có trả về)
+    NSString *expire = @"";
+    if (dict[@"expire"]) expire = [NSString stringWithFormat:@"%@", dict[@"expire"]];
+    else if (dict[@"expires_at"]) expire = [NSString stringWithFormat:@"%@", dict[@"expires_at"]];
+    else if (dict[@"expiration"]) expire = [NSString stringWithFormat:@"%@", dict[@"expiration"]];
+
     if (expire.length > 0) {
         NSDateFormatter *df = [[NSDateFormatter alloc] init];
         [df setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
-        [df setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:7 * 3600]]; // GMT+7
+        [df setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:7 * 3600]];
         NSDate *expireDate = [df dateFromString:expire];
         if (expireDate && [[NSDate date] compare:expireDate] == NSOrderedDescending) {
             res.success = false;
@@ -152,10 +178,12 @@ std::string HttpGetRequest(const std::string& urlString) {
         }
     }
 
-    // 3. Kiểm tra chữ ký HMAC (nếu server cung cấp chữ ký)
+    // 3. Kiểm tra chữ ký HMAC nếu có
+    NSString *signature = dict[@"signature"] ? [NSString stringWithFormat:@"%@", dict[@"signature"]] : @"";
+    NSNumber *timestamp = dict[@"timestamp"] ?: @0;
     if (signature.length > 0) {
         NSString *canonical = [NSString stringWithFormat:@"%@:%@:%@:%lld",
-                               status, expire, serverHwid, [timestamp longLongValue]];
+                               statusVal ?: @"", expire, serverHwid, [timestamp longLongValue]];
         NSString *expectedSign = [self computeHMACSHA256:canonical key:HMAC_SECRET_KEY];
         if (![signature.lowercaseString isEqualToString:expectedSign.lowercaseString]) {
             res.success = false;
