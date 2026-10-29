@@ -13,33 +13,41 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Install Theos
+      - name: Build Dylib with Apple Clang
         run: |
-          echo "=== Installing Theos ==="
-          export THEOS=~/theos
-          git clone --recursive https://github.com/theos/theos.git $THEOS
-          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+          echo "=== Compiling KeySystem.dylib for arm64 (iOS 14+) ==="
+          xcrun --sdk iphoneos clang++ -shared \
+            -arch arm64 \
+            -miphoneos-version-min=14.0 \
+            -fobjc-arc \
+            -std=c++17 \
+            -Iimgui -I. \
+            -framework UIKit \
+            -framework Metal \
+            -framework MetalKit \
+            -framework Foundation \
+            -framework QuartzCore \
+            -framework Security \
+            MetalOverlay.mm \
+            KeySystemHook.mm \
+            Network.mm \
+            KeychainHelper.mm \
+            imgui/imgui.cpp \
+            imgui/imgui_draw.cpp \
+            imgui/imgui_tables.cpp \
+            imgui/imgui_widgets.cpp \
+            imgui/imgui_impl_metal.mm \
+            -o KeySystem.dylib
 
-      - name: Setup iPhoneOS SDK
-        run: |
-          echo "=== Linking Xcode iPhoneOS SDK to Theos ==="
-          mkdir -p ~/theos/sdks
-          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-          echo "Xcode SDK Path: $SDK_PATH"
-          ln -s "$SDK_PATH" ~/theos/sdks/iPhoneOS.sdk
+          ls -lh KeySystem.dylib
 
-      - name: Build Dylib with Theos
+      - name: Codesign Dylib with ldid
         run: |
-          export THEOS=~/theos
-          make clean
-          make FINALPACKAGE=1
-
-      - name: Sign Dylib with ldid
-        run: |
-          ~/theos/bin/ldid -S .theos/obj/KeySystem.dylib || true
+          brew install ldid || true
+          ldid -S KeySystem.dylib || true
 
       - name: Upload KeySystem.dylib
         uses: actions/upload-artifact@v4
         with:
           name: KeySystem-Dylib
-          path: .theos/obj/KeySystem.dylib
+          path: KeySystem.dylib
