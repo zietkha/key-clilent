@@ -23,6 +23,7 @@ jobs:
       - name: Download iPhoneOS SDK
         run: |
           echo "=== Downloading iPhoneOS 16.5 SDK ==="
+          mkdir -p ~/theos/sdks
           curl -fsSL https://github.com/xybp888/iOS-SDKs/releases/download/iOS-16.5/iPhoneOS16.5.sdk.tar.xz -o iPhoneOS.sdk.tar.xz
           tar -xf iPhoneOS.sdk.tar.xz -C ~/theos/sdks/
           rm -f iPhoneOS.sdk.tar.xz
